@@ -1,0 +1,4 @@
+interface:
+  display_name: "欧洲人权法院 HUDOC 检索"
+  short_description: "检索 HUDOC 并读取 ECHR 判决/决定页面"
+  default_prompt: "使用 $HUDOCSearcher 检索 HUDOC；报告 itemid、申请号、文书类型、日期和实际取得正文的范围。"
