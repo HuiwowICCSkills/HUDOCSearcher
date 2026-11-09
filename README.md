@@ -2,7 +2,7 @@
 
 独立检索欧洲人权法院 HUDOC，并读取 `/eng?i=` 文档页。只访问 `hudoc.echr.coe.int`。
 
-仓库：<https://github.com/GDUFSICCSkills/HUDOCSearcher>（私有）。
+仓库：<https://github.com/HuiwowICCSkills/HUDOCSearcher>（私有）。
 
 ## 1. 环境
 
@@ -11,7 +11,7 @@ Python 3.10+，依赖 `requests`、`beautifulsoup4`、`pypdf`、`DrissionPage`�
 ## 2. 安装
 
 ```powershell
-git clone https://github.com/GDUFSICCSkills/HUDOCSearcher.git "$env:USERPROFILE\.codex\skills\HUDOCSearcher"
+git clone https://github.com/HuiwowICCSkills/HUDOCSearcher.git "$env:USERPROFILE\.codex\skills\HUDOCSearcher"
 python -m pip install -r "$env:USERPROFILE\.codex\skills\HUDOCSearcher\requirements.txt"
 ```
 
