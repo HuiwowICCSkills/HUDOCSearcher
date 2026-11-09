@@ -2,7 +2,7 @@
 
 独立检索欧洲人权法院 HUDOC，并读取 `/eng?i=` 文档页。只访问 `hudoc.echr.coe.int`。
 
-仓库：<https://github.com/HuiwowICCSkills/HUDOCSearcher>（私有）。
+仓库：<https://github.com/HuiwowICCSkills/HUDOCSearcher>（公开）。
 
 ## 1. 环境
 
