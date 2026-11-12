@@ -51,6 +51,27 @@ def make_http(args: argparse.Namespace) -> HTTP:
 def add_search_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--limit", type=int, default=10, help="1..50 (default 10)")
     parser.add_argument("--offset", type=int, default=0, help=">= 0 (default 0)")
+    parser.add_argument(
+        "--document-collection",
+        action="append",
+        default=[],
+        help=(
+            "HUDOC document collection, repeatable: GRANDCHAMBER, CHAMBER, "
+            "COMMITTEE, JUDGMENTS, DECISIONS, COMMUNICATEDCASES, "
+            "ADVISORYOPINIONS, REPORTS, RESOLUTIONS"
+        ),
+    )
+    parser.add_argument("--respondent", help="Respondent State ISO3 code, e.g. TUR")
+    parser.add_argument("--article", help="Convention article, e.g. 3 or 6-1")
+    parser.add_argument("--importance", help="HUDOC importance level, e.g. 1, 2, 3 or KEY")
+    parser.add_argument("--violation", help="Article number for a violation finding, e.g. 6")
+    parser.add_argument("--nonviolation", help="Article number for a non-violation finding")
+    parser.add_argument("--docname", help="Words in the document title")
+    parser.add_argument("--appno", help="Exact application number, e.g. 34356/06")
+    parser.add_argument("--doctype", help="HUDOC document type code, e.g. HEJUD or HEDEC")
+    parser.add_argument("--date-from", dest="date_from", help="Judgment date lower bound YYYY-MM-DD")
+    parser.add_argument("--date-to", dest="date_to", help="Judgment date upper bound YYYY-MM-DD")
+    parser.add_argument("--sort", default="", help="HUDOC sort expression (default: relevance)")
 
 
 def add_fetch_args(parser: argparse.ArgumentParser) -> None:
@@ -58,8 +79,57 @@ def add_fetch_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-mb", type=int, default=50, help="Maximum response size in MiB")
 
 
-def _query(text: str) -> str:
-    return 'contentsitename:ECHR AND "' + text.replace('"', '\\"') + '"'
+def _escape(value: str) -> str:
+    return str(value).replace('"', '\\"')
+
+
+def _clause(field: str, value: str) -> str:
+    return f'{field}:"{_escape(value)}"'
+
+
+def build_query(text: str, args: argparse.Namespace | None = None) -> str:
+    """Build a HUDOC query from free text plus the site's advanced fields.
+
+    Field names were verified against HUDOC's own advanced-search controls
+    (2026-11-12).  Values are quoted as phrases; multi-value document
+    collections are OR-ed, and every other condition is AND-ed.
+    """
+    parts: list[str] = ["contentsitename:ECHR"]
+    if text and text.strip():
+        parts.append('"' + _escape(text.strip()) + '"')
+    if args is not None:
+        if getattr(args, "document_collection", None):
+            collections = [
+                _clause("documentcollectionid2", value)
+                for value in args.document_collection
+                if value
+            ]
+            if collections:
+                parts.append("(" + " OR ".join(collections) + ")")
+        for field, attr in (
+            ("respondent", "respondent"),
+            ("article", "article"),
+            ("importance", "importance"),
+            ("violation", "violation"),
+            ("nonviolation", "nonviolation"),
+            ("docname", "docname"),
+            ("appno", "appno"),
+            ("doctype", "doctype"),
+        ):
+            value = getattr(args, attr, None)
+            if value:
+                parts.append(_clause(field, value))
+        date_from = getattr(args, "date_from", None)
+        date_to = getattr(args, "date_to", None)
+        if date_from or date_to:
+            parts.append(
+                "judgementdate:["
+                + (date_from or "*")
+                + " TO "
+                + (date_to or "*")
+                + "]"
+            )
+    return " AND ".join(parts)
 
 
 def _rows_from_payload(data: dict[str, Any], meta: dict[str, Any]) -> tuple[list[dict[str, Any]], int | None]:
@@ -97,16 +167,17 @@ def _rows_from_payload(data: dict[str, Any], meta: dict[str, Any]) -> tuple[list
 
 
 def search(query: str, args: argparse.Namespace, http: HTTP) -> dict[str, Any]:
-    if not query.strip():
-        raise ValueError("A non-empty query is required")
     if not 1 <= args.limit <= 50:
         raise ValueError("limit must be 1..50")
     if args.offset < 0:
         raise ValueError("offset must be >= 0")
+    built = build_query(query, args)
+    if not query.strip() and built == "contentsitename:ECHR":
+        raise ValueError("A non-empty query or at least one advanced filter is required")
     params = {
-        "query": _query(query),
+        "query": built,
         "select": SELECT_FIELDS,
-        "sort": "",
+        "sort": getattr(args, "sort", ""),
         "start": args.offset,
         "length": args.limit,
     }
@@ -123,9 +194,9 @@ def search(query: str, args: argparse.Namespace, http: HTTP) -> dict[str, Any]:
             + "?"
             + "&".join(
                 [
-                    "query=" + quote(_query(query), safe=""),
+                    "query=" + quote(built, safe=""),
                     "select=" + quote(SELECT_FIELDS, safe=","),
-                    "sort=",
+                    "sort=" + quote(getattr(args, "sort", ""), safe=""),
                     "start=" + str(args.offset),
                     "length=" + str(args.limit),
                 ]
@@ -138,6 +209,20 @@ def search(query: str, args: argparse.Namespace, http: HTTP) -> dict[str, Any]:
     return {
         "status": "ok" if rows or total == 0 else "no-results-in-queried-index",
         "query": query,
+        "query_expression": built,
+        "filters": {
+            "document_collection": getattr(args, "document_collection", []),
+            "respondent": getattr(args, "respondent", None),
+            "article": getattr(args, "article", None),
+            "importance": getattr(args, "importance", None),
+            "violation": getattr(args, "violation", None),
+            "nonviolation": getattr(args, "nonviolation", None),
+            "docname": getattr(args, "docname", None),
+            "appno": getattr(args, "appno", None),
+            "doctype": getattr(args, "doctype", None),
+            "date_from": getattr(args, "date_from", None),
+            "date_to": getattr(args, "date_to", None),
+        },
         "total": total,
         "results": rows,
         "pagination": {
@@ -151,7 +236,10 @@ def search(query: str, args: argparse.Namespace, http: HTTP) -> dict[str, Any]:
         },
         "warnings": warnings,
         "transport": "headless-chrome-page-fetch" if fallback else "direct-http",
-        "scope": "HUDOC search metadata for the ECHR collection",
+        "scope": (
+            "HUDOC search metadata for the ECHR collection; advanced filters use "
+            "the field syntax of the HUDOC search API"
+        ),
         "evidence": http.evidence,
     }
 
@@ -234,7 +322,13 @@ def doctor(args: argparse.Namespace) -> dict[str, Any]:
     try:
         data, meta = http.json(
             API_URL,
-            {"query": _query("state immunity"), "select": "itemid,docname", "sort": "", "start": 0, "length": 1},
+            {
+                "query": build_query("state immunity"),
+                "select": "itemid,docname",
+                "sort": "",
+                "start": 0,
+                "length": 1,
+            },
             headers=_headers(),
         )
         checks.append(

@@ -21,6 +21,12 @@ HUDOC 的 JSON API 和文档页经常被 Cloudflare 403/挑战页拦截。适配
 # 检索 HUDOC
 & '<skill-dir>/run.ps1' search 'state immunity' --limit 10 --out './hudoc-search.json'
 
+# 高级检索：大法庭 + 第 6 条 + 重要性 1 + 日期范围
+& '<skill-dir>/run.ps1' search 'fair trial' --document-collection GRANDCHAMBER --article 6 --importance 1 --date-from 2015-01-01 --date-to 2020-12-31 --limit 5
+
+# 按被告国、文书类型和申请号收窄
+& '<skill-dir>/run.ps1' search 'effective remedy' --respondent TUR --doctype HEJUD --appno '34356/06' --limit 5
+
 # 读取一份判决/决定页面
 & '<skill-dir>/run.ps1' fetch 'https://hudoc.echr.coe.int/eng?i=001-140005' --out './hudoc-doc.json' --text-out './hudoc-doc.txt'
 
@@ -33,6 +39,7 @@ HUDOC 的 JSON API 和文档页经常被 Cloudflare 403/挑战页拦截。适配
 ## 结果边界
 
 - `search` 返回 HUDOC 检索元数据：`docname`、`appno`、`doctype`、`judgementdate`、`respondent`、`itemid`；不是判决正文。`total` 是 HUDOC 的 `resultcount`。
+- 高级字段会写入报告的 `query_expression` 和 `filters`：`--document-collection` 可重复（多值之间 OR），其余条件与关键词之间全部 AND；`--date-from`/`--date-to` 映射到 `judgementdate:[… TO …]`。这些字段名来自 HUDOC 自身 Advanced Search 的查询语法，不是本技能另造的标准。
 - `fetch` 只接受 `https://hudoc.echr.coe.int/` URL；文本可能包含导航、脚注和多种语言版本，引用前核对 itemid、申请号、日期和文书类型。
 - 直接 API 被 403 时，报告 `transport=headless-chrome-page-fetch` 并在 `warnings` 保留直接失败原因；这表示回退成功，不是“没有资料”。
 - HUDOC 可能不签发 `cf_clearance`；回退以 `HTTP 200 + 合法 JSON + resultcount/results` 或渲染后的有效 HTML 为成功判据，不能只凭 Cookie 判断。
